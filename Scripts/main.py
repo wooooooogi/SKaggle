@@ -46,29 +46,49 @@ img_size = 64
 img_channels = 3
 
 noise_size = 256    #   이게 image size와 관련이 있을거니... 함 잘 짜보자.
-hidden_node1 = 512   #   잘 고려해야지.
+hidden_node1 = 3072   #   잘 고려해야지.
+hidden_node2 = 768
+hidden_node3 = 192
 X = tf.compat.v1.placeholder(tf.float32, [None, img_size * img_size * img_channels])
 # Y = tf.compat.v1.placeholder(tf.float32, [None, img_size * img_size * img_channels])
 Z = tf.compat.v1.placeholder(tf.float32, [None, noise_size])
 
-G_w1 = tf.Variable(tf.random.normal([noise_size, hidden_node1], stddev=0.01))
-G_w2 = tf.Variable(tf.random.normal([hidden_node1, img_size * img_size * img_channels], stddev=0.01))
-G_b1 = tf.Variable(tf.random.normal([hidden_node1]))
-G_b2 = tf.Variable(tf.random.normal([img_size * img_size * img_channels]))
+G_w1 = tf.Variable(tf.random.normal([noise_size, hidden_node3], stddev=0.01))
+G_b1 = tf.Variable(tf.random.normal([hidden_node3]))
+
+G_w2 = tf.Variable(tf.random.normal([hidden_node3, hidden_node2], stddev=0.01))
+G_b2 = tf.Variable(tf.random.normal([hidden_node2]))
+
+G_w3 = tf.Variable(tf.random.normal([hidden_node2, hidden_node1], stddev=0.01))
+G_b3 = tf.Variable(tf.random.normal([hidden_node1]))
+
+G_S_w1 = tf.Variable(tf.random.normal([hidden_node1, img_size * img_size * img_channels], stddev=0.01))
+G_S_b1 = tf.Variable(tf.random.normal([img_size * img_size * img_channels]))
 
 def generator(noise):
-    hidden = tf.nn.relu(tf.matmul(noise, G_w1) + G_b1)
-    output = tf.nn.sigmoid(tf.matmul(hidden, G_w2) + G_b2)
+    hidden1 = tf.nn.relu(tf.matmul(noise, G_w1) + G_b1)
+    hidden2 = tf.nn.relu(tf.matmul(hidden1, G_w2) + G_b2)
+    hidden3 = tf.nn.relu(tf.matmul(hidden2, G_w3) + G_b3)
+    output = tf.nn.sigmoid(tf.matmul(hidden3, G_S_w1) + G_S_b1)
     return output
 
 D_w1 = tf.Variable(tf.random.normal([img_size * img_size * img_channels, hidden_node1], stddev=0.01))
-D_w2 = tf.Variable(tf.random.normal([hidden_node1, 1], stddev=0.01))
 D_b1 = tf.Variable(tf.zeros([hidden_node1]))
-D_b2 = tf.Variable(tf.zeros([1]))
+
+D_w2 = tf.Variable(tf.random.normal([hidden_node1, hidden_node2], stddev=0.01))
+D_b2 = tf.Variable(tf.zeros([hidden_node2]))
+
+D_w3 = tf.Variable(tf.random.normal([hidden_node2, hidden_node3], stddev=0.01))
+D_b3 = tf.Variable(tf.zeros([hidden_node3]))
+
+D_S_w1 = tf.Variable(tf.random.normal([hidden_node3, 1], stddev=0.01))
+D_S_b1 = tf.Variable(tf.zeros([1]))
 
 def discriminator(input):
-    hidden = tf.nn.relu(tf.matmul(input, D_w1) + D_b1)
-    output = tf.nn.sigmoid(tf.matmul(hidden, D_w2) + D_b2)
+    hidden1 = tf.nn.relu(tf.matmul(input, D_w1) + D_b1)
+    hidden2 = tf.nn.relu(tf.matmul(hidden1, D_w2) + D_b2)
+    hidden3 = tf.nn.relu(tf.matmul(hidden2, D_w3) + D_b3)
+    output = tf.nn.sigmoid(tf.matmul(hidden3, D_S_w1) + D_S_b1)
     return output
 
 G = generator(Z)
@@ -78,8 +98,9 @@ D_gene = discriminator(G)
 loss_D = -tf.reduce_mean(tf.math.log(D_real) + tf.math.log(1 - D_gene))
 loss_G = -tf.reduce_mean(tf.math.log(D_gene))
 
-train_D = tf.compat.v1.train.AdamOptimizer(learning_rate=0.0002).minimize(loss_D, var_list=[D_w1, D_b1, D_w2, D_b2])    #   compat.train.v1.
-train_G = tf.compat.v1.train.AdamOptimizer(learning_rate=0.0002).minimize(loss_G, var_list=[G_w1, G_b1, G_w2, G_b2])
+#
+train_D = tf.compat.v1.train.AdamOptimizer(learning_rate=0.0002).minimize(loss_D, var_list=[D_w1, D_b1, D_w2, D_b2, D_w3, D_b3, D_S_w1, D_S_b1])    #   compat.train.v1.
+train_G = tf.compat.v1.train.AdamOptimizer(learning_rate=0.0002).minimize(loss_G, var_list=[G_w1, G_b1, G_w2, G_b2, G_w3, G_b3, G_S_w1, G_S_b1])
 
 sess = tf.compat.v1.Session()
 sess.run(tf.compat.v1.global_variables_initializer())
@@ -95,7 +116,7 @@ loss_val_D = 0
 loss_val_G = 0
 # batch = int(data_size / batch_size)
 for i in range(epoch):#epoch
-    for j in range(10):#total_batch
+    for j in range(25):#total_batch
         #   Load data
         for k in range(batch_size):#batch_size
             k = j * batch_size
@@ -124,7 +145,7 @@ for i in range(epoch):#epoch
 
         # saver.save(sess, "./model.ckpt")
     print("epoch {tryNum} finished".format(tryNum=i))
-    if i == 0 or (i + 1) % image_save_friq == 0:
+    if True:    #   i == 0 or (i + 1) % image_save_friq == 0:
         fig, ax = plt.subplots(1, test_size, figsize=(test_size, 1))
         for l in range(test_size):
             noise_test = np.random.normal(size=(test_size, noise_size))
