@@ -12,7 +12,7 @@ import cv2
 tf.compat.v1.reset_default_graph()
 
 #   Dir of model check point
-save_file = "./model.ckpt"
+# save_file = "./model.ckpt"
 
 
 #   Get path where dog image place
@@ -46,14 +46,14 @@ img_size = 64
 img_channels = 3
 
 noise_size = 256    #   이게 image size와 관련이 있을거니... 함 잘 짜보자.
-hidden_node = 512   #   잘 고려해야지.
+hidden_node1 = 512   #   잘 고려해야지.
 X = tf.compat.v1.placeholder(tf.float32, [None, img_size * img_size * img_channels])
 # Y = tf.compat.v1.placeholder(tf.float32, [None, img_size * img_size * img_channels])
 Z = tf.compat.v1.placeholder(tf.float32, [None, noise_size])
 
-G_w1 = tf.Variable(tf.random.normal([noise_size, hidden_node], stddev=0.01))
-G_w2 = tf.Variable(tf.random.normal([hidden_node, img_size * img_size * img_channels], stddev=0.01))
-G_b1 = tf.Variable(tf.random.normal([hidden_node]))
+G_w1 = tf.Variable(tf.random.normal([noise_size, hidden_node1], stddev=0.01))
+G_w2 = tf.Variable(tf.random.normal([hidden_node1, img_size * img_size * img_channels], stddev=0.01))
+G_b1 = tf.Variable(tf.random.normal([hidden_node1]))
 G_b2 = tf.Variable(tf.random.normal([img_size * img_size * img_channels]))
 
 def generator(noise):
@@ -61,9 +61,9 @@ def generator(noise):
     output = tf.nn.sigmoid(tf.matmul(hidden, G_w2) + G_b2)
     return output
 
-D_w1 = tf.Variable(tf.random.normal([img_size * img_size * img_channels, hidden_node], stddev=0.01))
-D_w2 = tf.Variable(tf.random.normal([hidden_node, 1], stddev=0.01))
-D_b1 = tf.Variable(tf.zeros([hidden_node]))
+D_w1 = tf.Variable(tf.random.normal([img_size * img_size * img_channels, hidden_node1], stddev=0.01))
+D_w2 = tf.Variable(tf.random.normal([hidden_node1, 1], stddev=0.01))
+D_b1 = tf.Variable(tf.zeros([hidden_node1]))
 D_b2 = tf.Variable(tf.zeros([1]))
 
 def discriminator(input):
@@ -72,9 +72,11 @@ def discriminator(input):
     return output
 
 G = generator(Z)
+D_real = discriminator(X)
+D_gene = discriminator(G)
 
-loss_D = -tf.reduce_mean(tf.math.log(discriminator(X)) + tf.math.log(1 - discriminator(G)))
-loss_G = -tf.reduce_mean(tf.math.log(discriminator(G)))
+loss_D = -tf.reduce_mean(tf.math.log(D_real) + tf.math.log(1 - D_gene))
+loss_G = -tf.reduce_mean(tf.math.log(D_gene))
 
 train_D = tf.compat.v1.train.AdamOptimizer(learning_rate=0.0002).minimize(loss_D, var_list=[D_w1, D_b1, D_w2, D_b2])    #   compat.train.v1.
 train_G = tf.compat.v1.train.AdamOptimizer(learning_rate=0.0002).minimize(loss_G, var_list=[G_w1, G_b1, G_w2, G_b2])
@@ -82,45 +84,69 @@ train_G = tf.compat.v1.train.AdamOptimizer(learning_rate=0.0002).minimize(loss_G
 sess = tf.compat.v1.Session()
 sess.run(tf.compat.v1.global_variables_initializer())
 
-saver = tf.compat.v1.train.Saver()  #  tf.train.Saver()
-noise_test = np.random.normal(size=(10, noise_size))
+# saver = tf.compat.v1.train.Saver(tf.compat.v1.global_variables_initializer())  #  tf.train.Saver()
+test_size = 10
+image_save_friq = 10
+# noise_test = np.random.normal(size=(test_size, noise_size))
 epoch = 100
-batch_size = 100
+batch_size = 10
 total_batch = int(len(data_size) / batch_size)
+loss_val_D = 0
+loss_val_G = 0
 # batch = int(data_size / batch_size)
-for i in range(epoch):
-    for j in range(total_batch):
+for i in range(epoch):#epoch
+    for j in range(10):#total_batch
         #   Load data
-        for i in range(batch_size):
-            i = j * batch_size
-            if i % batch_size == 0:
-                tmpimg = cv2.imread(data_path + data_name[i])
+        for k in range(batch_size):#batch_size
+            k = j * batch_size
+            if k % batch_size == 0:
+                tmpimg = cv2.imread(data_path + data_name[k])
                 tmpimg = np.array(tmpimg).ravel()
                 tmpimg = tmpimg / 255.
                 tmpimg = tmpimg[np.newaxis, :]
                 imgdata = np.array(tmpimg)
             else:
-                tmpimg = cv2.imread(data_path + data_name[i])
+                tmpimg = cv2.imread(data_path + data_name[k])
                 tmpimg = np.array(tmpimg).ravel()
                 tmpimg = tmpimg / 255.
                 tmpimg = tmpimg[np.newaxis, :]
                 imgdata = np.append(imgdata, tmpimg, axis=0)
         batch_xs = imgdata
         _noise = np.random.normal(size=(total_batch, noise_size))
+        # _noise = np.random.normal(total_batch, noise_size)
+        # print(batch_xs)
+        # print(_noise)
+        # print(batch_xs.shape)
+        # print(_noise.shape)
 
-        sess.run(train_D, feed_dict={X: batch_xs, Z: _noise})
-        sess.run(train_G, feed_dict={Z: _noise})
+        _, loss_val_D = sess.run([train_D, loss_D], feed_dict={X: batch_xs, Z: _noise})
+        _, loss_val_G = sess.run([train_G, loss_G], feed_dict={Z: _noise})
 
-        saver.save(sess, save_file)
-    if epoch == 0 or (epoch + 1) % 10 == 0:
-        samples = sess.run(G, feed_dict={Z: noise_test})
-
-        fig, ax = plt.subplots(1, int(epoch/10), figsize=(int(epoch/10), 1))
-        for i in range(10):
-            ax[i].set_axis_off()
-            ax[i].imshow(np.reshape(samples[i], [img_size, img_size, img_channels]))
-        plt.savefig('./samples_ex_{}.png'.format(str(epoch).zfill(3)), bbox_inches='tight')
-        plt.close(fig)
+        # saver.save(sess, "./model.ckpt")
+    print("epoch {tryNum} finished".format(tryNum=i))
+    if i == 0 or (i + 1) % image_save_friq == 0:
+        fig, ax = plt.subplots(1, test_size, figsize=(test_size, 1))
+        for l in range(test_size):
+            noise_test = np.random.normal(size=(test_size, noise_size))
+            samples = sess.run(G, feed_dict={Z: noise_test})
+            # samples = samples * 255.
+            # print(samples)
+            ax[l].set_axis_off()
+            ax[l].imshow(np.reshape(samples[l], [img_size, img_size, img_channels]))
+        plt.savefig('./Gen/{}.png'.format(str(i+1).zfill(3)), bbox_inches='tight')
+        # if i+1 == epoch:
+        #     fig, ax = plt.subplots(image_save_friq, int(epoch / image_save_friq),
+        #                            figsize=(int(epoch / image_save_friq), image_save_friq))
+        #     for l in range(test_size):
+        #         noise_test = np.random.normal(size=(test_size, noise_size))
+        #         samples = sess.run(G, feed_dict={Z: noise_test})
+        #         samples = samples * 255.
+        #         print(samples)
+        #         tmpl = int(l + i * image_save_friq)
+        #         ax[tmpl, l].set_axis_off()
+        #         ax[tmpl, l].imshow(np.reshape(samples[l], [img_size, img_size, img_channels]))
+        #     plt.savefig('./Gen/All.png', bbox_inches='tight')
+        #     plt.close(fig)
 
 
 
