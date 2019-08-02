@@ -48,7 +48,7 @@ G_w4 = tf.Variable(tf.random.normal([3, 3, 3, 3], stddev=0.01))
 
 def generator(noise, b_size):
     #   256 -> 16*16*64
-    print(noise.shape)
+    # print(noise.shape)
     G_L_1 = tf.nn.relu(tf.matmul(noise, G_w1) + G_b1)
     #   Reshape 16*16*64 -> 16, 16, 64
     G_L_2 = tf.reshape(G_L_1, [b_size, 16, 16, 1])
@@ -105,7 +105,7 @@ test_size = 10
 image_save_friq = 10
 # noise_test = np.random.normal(size=(test_size, noise_size))
 epoch = 100
-batch_size = 1000
+batch_size = 200
 total_batch = int(len(data_size) / batch_size)
 loss_val_D = 0
 loss_val_G = 0
@@ -117,8 +117,16 @@ D_gene = discriminator(G, batch_size)
 loss_D = -tf.reduce_mean(tf.math.log(D_real) + tf.math.log(1 - D_gene))
 loss_G = -tf.reduce_mean(tf.math.log(D_gene))
 
-train_D = tf.compat.v1.train.AdamOptimizer(learning_rate=0.0002).minimize(loss_D, var_list=[D_w1, D_b1, D_w2, D_b2, D_w3, D_b3, D_w4, D_b4])    #   compat.train.v1.
-train_G = tf.compat.v1.train.AdamOptimizer(learning_rate=0.0002).minimize(loss_G, var_list=[G_w1, G_b1, G_w2, G_w3, G_w4])
+#   Learning rate
+global_step = tf.compat.v1.Variable(0, trainable=False)
+starter_learning_rate = 0.0002  #   learning rate 0.002 -> loss inf
+learning_rate = tf.compat.v1.train.exponential_decay(
+    learning_rate=starter_learning_rate, global_step=global_step,
+    decay_steps=epoch*total_batch, decay_rate=0.98, staircase=True,
+    name="ExponentialDecay")
+#   learning_rate=0.0002
+train_D = tf.compat.v1.train.AdamOptimizer(learning_rate=learning_rate).minimize(loss_D, var_list=[D_w1, D_b1, D_w2, D_b2, D_w3, D_b3, D_w4, D_b4])    #   compat.train.v1.
+train_G = tf.compat.v1.train.AdamOptimizer(learning_rate=learning_rate).minimize(loss_G, var_list=[G_w1, G_b1, G_w2, G_w3, G_w4])
 
 sess = tf.compat.v1.Session()
 sess.run(tf.compat.v1.global_variables_initializer())
@@ -151,7 +159,8 @@ for i in range(epoch):  #   epoch
         # print(_noise.shape)
         _, loss_val_D = sess.run([train_D, loss_D], feed_dict={X: batch_xs, Z: _noise})
         _, loss_val_G = sess.run([train_G, loss_G], feed_dict={Z: _noise})
-        print(loss_val_D, loss_val_G)
+    print(loss_val_D, loss_val_G)
+    print(learning_rate)
         # saver.save(sess, "./model.ckpt")
     print("epoch {tryNum} finished".format(tryNum=i))
     if True:    #   i == 0 or (i + 1) % image_save_friq == 0:
@@ -160,8 +169,23 @@ for i in range(epoch):  #   epoch
             noise_test = np.random.normal(size=(test_size, noise_size))#.astype(np.float32)
             # samples = generator(noise_test, batch_size)
             samples = sess.run(generator(Z, test_size), feed_dict={Z: noise_test})
-            # samples = samples * 255.
-            # print(samples)
+            # IsSampleDog = sess.run(discriminator(X, test_size), feed_dict={X: samples})
+            # for k in range(test_size):  # batch_size
+            #     k = k + i * epoch
+            #     if k % batch_size == 0:
+            #         tmpimg = cv2.imread(data_path + data_name[k])  # , cv2.IMREAD_GRAYSCALE)
+            #         tmpimg = tmpimg / 255.
+            #         tmpimg = tmpimg[np.newaxis, :, :, :]
+            #         imgdata = np.array(tmpimg)
+            #     else:
+            #         tmpimg = cv2.imread(data_path + data_name[k])
+            #         tmpimg = tmpimg / 255.
+            #         tmpimg = tmpimg[np.newaxis, :, :, :]
+            #         imgdata = np.append(imgdata, tmpimg, axis=0)
+            # imgdata = imgdata.astype(dtype=np.float32)
+            # IsDogDog = sess.run(discriminator(X, test_size), feed_dict={X: imgdata})
+            # print("Are samples dogs?", IsSampleDog)
+            # print("Are dogs dogs?", IsDogDog)
             ax[l].set_axis_off()
             ax[l].imshow(np.reshape(samples[l], [img_size, img_size, img_channels]))
         plt.savefig('./Gen/{}.png'.format(str(i+1).zfill(3)), bbox_inches='tight')
